@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Generate sdkconfig.local from .env. Stdlib only; never prints secret values."""
+import argparse
+import os
+import re
+import sys
+
+# Pins unusable for LED data on a classic ESP32: strapping (0, 2, 5, 12, 15),
+# flash (6-11), UART0 (1, 3).
+FORBIDDEN_GPIO = {0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 15}
+
+# key -> (symbol, required, min_bytes, max_bytes, pattern or None)
+STRING_KEYS = {
+    "WIFI_SSID": ("SIOT_WIFI_SSID", True, 1, 32, None),
+    "WIFI_PASSWORD": ("SIOT_WIFI_PASSWORD", True, 8, 63, None),
+    "WEB_TOKEN": ("SIOT_WEB_TOKEN", False, 8, 64, r"[\x21-\x7e]+"),
+    "IMS_URL": ("SIOT_IMS_URL", False, 1, 512, None),
+    "IMS_TOKEN": ("SIOT_IMS_TOKEN", False, 1, 512, None),
+    "DEVICE_ID": ("SIOT_DEVICE_ID", False, 1, 64, None),
+}
+# key -> (symbol, default or None if required, min, max)
+INT_KEYS = {
+    "LED_COUNT": ("SIOT_LED_COUNT", None, 1, 30),
+    "LED_GPIO": ("SIOT_LED_GPIO", 18, 0, 33),
+    "LED2_COUNT": ("SIOT_LED2_COUNT", 0, 0, 30),
+    "LED2_GPIO": ("SIOT_LED2_GPIO", 19, 0, 33),
+    "POLL_INTERVAL_MS": ("SIOT_POLL_INTERVAL_MS", 5000, 1000, 3600000),
+    "GLOW_MS": ("SIOT_GLOW_MS", 5000, 100, 600000),
+    "GLOW_BRIGHTNESS_PCT": ("SIOT_GLOW_BRIGHTNESS_PCT", 25, 1, 100),
+}
+RGB_DEFAULT = "FFB46E"
+
+
+class EnvError(Exception):
+    pass
+
+
+def parse_env(text):
+    values = {}
+    for n, raw in enumerate(text.splitlines(), 1):
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[7:].lstrip()
+        if "=" not in line:
+            raise EnvError(f".env line {n}: expected KEY=VALUE")
+        key, _, val = line.partition("=")
+        key, val = key.strip(), val.strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in "\"'":
+            val = val[1:-1]
+        values[key] = val
+    return values
+
+
+def is_placeholder(val):
+    return (not val.strip()) or (val.startswith("<") and val.endswith(">")) \
+        or val.lower() == "changeme"
+
+
+def kconfig_str(val):
+    if any(c in val for c in "\r\n"):
+        raise EnvError("values must not contain newlines")
+    return '"' + val.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def build_config(values):
+    errors, lines, parsed = [], [], {}
+    for key, (sym, required, lo, hi, pattern) in STRING_KEYS.items():
+        val = values.get(key, "")
+        if not val.strip() and not required:
+            continue  # optional and unset: Kconfig default ("") applies
+        if is_placeholder(val):
+            errors.append(f"{key} is missing or still a placeholder")
+            continue
+        if not lo <= len(val.encode("utf-8")) <= hi:
+            errors.append(f"{key} must be {lo}..{hi} bytes long")
+            continue
+        if pattern and not re.fullmatch(pattern, val):
+            errors.append(f"{key} contains characters that are not allowed")
+            continue
+        try:
+            lines.append(f"CONFIG_{sym}={kconfig_str(val)}")
+        except EnvError as e:
+            errors.append(f"{key}: {e}")
+    for key, (sym, default, lo, hi) in INT_KEYS.items():
+        raw = values.get(key)
+        if raw is None or raw == "":
+            if default is None:
+                errors.append(f"{key} is required")
+                continue
+            num = default
+        elif is_placeholder(raw) or not re.fullmatch(r"\d+", raw):
+            errors.append(f"{key} must be an integer (got a non-numeric value)")
+            continue
+        else:
+            num = int(raw)
+        if not lo <= num <= hi:
+            errors.append(f"{key} must be in {lo}..{hi}")
+            continue
+        if key in ("LED_GPIO", "LED2_GPIO") and num in FORBIDDEN_GPIO:
+            errors.append(f"LED_GPIO {num} is a strapping/flash/UART pin; choose another")
+            continue
+        lines.append(f"CONFIG_{sym}={num}")
+        parsed[key] = num
+    if parsed.get("LED2_COUNT") and parsed.get("LED_GPIO") == parsed.get("LED2_GPIO"):
+        errors.append("LED2_GPIO must differ from LED_GPIO when LED2_COUNT > 0")
+    if parsed.get("LED_COUNT", 0) + parsed.get("LED2_COUNT", 0) > 30:
+        errors.append("LED_COUNT + LED2_COUNT must be at most 30")
+    rgb = values.get("GLOW_RGB", RGB_DEFAULT).removeprefix("0x").removeprefix("#")
+    if re.fullmatch(r"[0-9A-Fa-f]{6}", rgb):
+        lines.append(f"CONFIG_SIOT_GLOW_RGB=0x{rgb.upper()}")
+    else:
+        errors.append("GLOW_RGB must be 6 hex digits (RRGGBB)")
+    url = values.get("IMS_URL", "")
+    if url and not is_placeholder(url) and not re.match(r"https?://", url):
+        errors.append("IMS_URL must start with http:// or https://")
+    if errors:
+        raise EnvError("\n".join(errors))
+    return "\n".join(lines) + "\n"
+
+
+def main(argv=None):
+    p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument("--env", default=".env")
+    p.add_argument("--out", default="sdkconfig.local")
+    args = p.parse_args(argv)
+    try:
+        with open(args.env, encoding="utf-8") as f:
+            text = f.read()
+    except FileNotFoundError:
+        print(f"error: {args.env} not found (copy .env.example to .env)", file=sys.stderr)
+        return 1
+    try:
+        out = build_config(parse_env(text))
+    except EnvError as e:
+        print(f"error: invalid {args.env}:\n{e}", file=sys.stderr)
+        return 1
+    fd = os.open(args.out, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(out)
+    print(f"wrote {args.out}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

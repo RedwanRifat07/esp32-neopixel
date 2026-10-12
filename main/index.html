@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drawer LED Test</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#15181d;--muted:#5b6470;--card:#fff;--line:#d5d9e0;--accent:#c76a00;--on:#fff;--ok:#1a7f37;--err:#b42318}
+@media (prefers-color-scheme:dark){:root{--bg:#101318;--fg:#e8ebf0;--muted:#98a2b3;--card:#181c23;--line:#2a303a;--accent:#ffb454;--on:#1a1200;--ok:#4ac26b;--err:#ff7b72}}
+*{box-sizing:border-box}
+body{margin:0;padding:16px;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,sans-serif}
+main{max-width:480px;margin:0 auto}
+h1{font-size:1.25rem;margin:8px 0 16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+label{display:block;font-size:.875rem;color:var(--muted);margin-bottom:6px}
+.row{display:flex;gap:8px}
+input{flex:1;min-width:0;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--fg)}
+button{font:inherit;padding:10px 14px;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg);cursor:pointer}
+button.primary{background:var(--accent);color:var(--on);border-color:var(--accent);font-weight:600}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button:disabled{opacity:.5;cursor:default}
+#grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+#grid button{padding:18px 0;font-size:1.1rem;font-weight:600}
+#msg{min-height:1.4em;margin:0;font-size:.9rem}
+.ok{color:var(--ok)}.err{color:var(--err)}
+#auth{display:none;margin-top:12px}
+</style>
+</head>
+<body>
+<main>
+<h1>Drawer LED Test</h1>
+<section class="card">
+  <label for="num">Drawer number</label>
+  <div class="row">
+    <input id="num" type="number" inputmode="numeric" min="1" step="1" placeholder="1">
+    <button id="go" class="primary">Glow</button>
+  </div>
+  <div id="auth"><label for="tok">Access token</label><input id="tok" type="password" autocomplete="off"></div>
+</section>
+<section class="card">
+  <label>Quick select</label>
+  <div id="grid"></div>
+</section>
+<section class="card">
+  <div class="row"><button id="off">All off</button></div>
+  <p id="msg" role="status" aria-live="polite"></p>
+</section>
+</main>
+<script>
+(function(){
+  var $=function(id){return document.getElementById(id)};
+  var drawers=0, msg=$("msg");
+  function say(t,cls){msg.textContent=t;msg.className=cls||""}
+  function post(path,body){
+    var h={"Content-Type":"application/json"};
+    if($("tok").value){h["X-Auth-Token"]=$("tok").value}
+    return fetch(path,{method:"POST",headers:h,body:body==null?"{}":JSON.stringify(body)})
+      .then(function(r){return r.json().catch(function(){return{}}).then(function(j){return{ok:r.ok,status:r.status,j:j}})});
+  }
+  function glow(n){
+    n=Number(n);
+    if(!Number.isInteger(n)||n<1||n>drawers){say("Enter a drawer from 1 to "+drawers+".","err");return}
+    post("/api/glow",{drawer:n}).then(function(r){
+      if(r.ok){say("Drawer "+n+" glowing.","ok")}
+      else{say((r.j.error||"Request failed")+" ("+r.status+")","err")}
+    }).catch(function(){say("Cannot reach the device.","err")});
+  }
+  $("go").onclick=function(){glow($("num").value)};
+  $("num").onkeydown=function(e){if(e.key==="Enter"){glow($("num").value)}};
+  $("off").onclick=function(){
+    post("/api/off").then(function(r){
+      if(r.ok){say("All drawers off.","ok")}else{say((r.j.error||"Request failed")+" ("+r.status+")","err")}
+    }).catch(function(){say("Cannot reach the device.","err")});
+  };
+  fetch("/api/status").then(function(r){return r.json()}).then(function(s){
+    drawers=s.drawers;
+    $("num").max=drawers;
+    $("num").placeholder="1-"+drawers;
+    if(s.auth){$("auth").style.display="block"}
+    var g=$("grid");
+    for(var i=1;i<=drawers;i++){
+      var b=document.createElement("button");
+      b.textContent=i;
+      b.setAttribute("aria-label","Glow drawer "+i);
+      b.onclick=(function(n){return function(){glow(n)}})(i);
+      g.appendChild(b);
+    }
+  }).catch(function(){say("Cannot load device status.","err")});
+})();
+</script>
+</body>
+</html>

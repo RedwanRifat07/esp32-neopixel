@@ -1,0 +1,85 @@
+menu "SIOT IMS NeoPixel"
+
+    config SIOT_WIFI_SSID
+        string "Wi-Fi SSID"
+        default ""
+        help
+            Generated from .env (WIFI_SSID) by tools/env_to_sdkconfig.py.
+
+    config SIOT_WIFI_PASSWORD
+        string "Wi-Fi password"
+        default ""
+        help
+            Generated from .env (WIFI_PASSWORD). Compiled into the flash image.
+
+    config SIOT_IMS_URL
+        string "IMS poll URL (optional until the IMS poller exists)"
+        default ""
+        help
+            Generated from .env (IMS_URL).
+
+    config SIOT_IMS_TOKEN
+        string "IMS auth token"
+        default ""
+        help
+            Generated from .env (IMS_TOKEN). Compiled into the flash image.
+
+    config SIOT_DEVICE_ID
+        string "Device ID presented to IMS"
+        default ""
+
+    config SIOT_LED_GPIO
+        int "NeoPixel strip 1 data GPIO (drawers 1..LED_COUNT)"
+        range 0 33
+        default 18
+
+    config SIOT_LED_COUNT
+        int "NeoPixel count on strip 1"
+        range 1 30
+        default 5
+
+    config SIOT_LED2_GPIO
+        int "NeoPixel strip 2 data GPIO (must differ from strip 1)"
+        range 0 33
+        default 19
+
+    config SIOT_LED2_COUNT
+        int "NeoPixel count on strip 2 (0 = unused)"
+        range 0 30
+        default 4
+
+    config SIOT_POLL_INTERVAL_MS
+        int "IMS poll interval (ms)"
+        range 1000 3600000
+        default 5000
+
+    config SIOT_GLOW_MS
+        int "Glow duration (ms)"
+        range 100 600000
+        default 5000
+
+    config SIOT_GLOW_BRIGHTNESS_PCT
+        int "Glow brightness (percent of full)"
+        range 1 100
+        default 25
+
+    config SIOT_GLOW_RGB
+        hex "Glow colour (0xRRGGBB)"
+        range 0x000000 0xFFFFFF
+        default 0xFFB46E
+
+    config SIOT_WEB_TOKEN
+        string "Web test page access token (empty = no auth)"
+        default ""
+        help
+            Generated from .env (WEB_TOKEN). If set, POSTs to the test API must send it in
+            the X-Auth-Token header.
+
+    config SIOT_LED_BOOT_TEST
+        bool "Wiring test: chase drawers 1..N at boot"
+        default y
+        help
+            Lights drawers one after another at startup to verify wiring. Disable once
+            the IMS poller drives the LEDs.
+
+endmenu

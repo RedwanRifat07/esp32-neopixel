@@ -1,0 +1,8 @@
+.env
+sdkconfig.local
+sdkconfig
+sdkconfig.old
+build/
+managed_components/
+.remember/
+__pycache__/
