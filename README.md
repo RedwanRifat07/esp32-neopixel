@@ -8,7 +8,7 @@ its pixel glow for a fixed time, then switch off on its own timer.
 
 | Area | State | Evidence |
 |---|---|---|
-| Build (ESP-IDF v5.5.4, target `esp32`) | PROVEN | `idf.py build` succeeded, app 0xca580 bytes (21% of the 1 MB app partition free) |
+| Build (ESP-IDF v5.5.4, target `esp32`) | PROVEN | `idf.py build` succeeded; app 0xe3eb0 bytes, 70% of the 3 MB app partition free (mock/dev build) |
 | Flash + boot on a real ESP32 | PROVEN | write verified, boot log shows config, Wi-Fi join and `web: listening on port 80` |
 | HTTP API (`/api/status`, `/api/glow`) | PROVEN | exercised with `curl` against the running board |
 | Pixels physically lighting on both strips | UNKNOWN | firmware logs success, but the LEDs were not observed by the author of this README |
@@ -51,7 +51,8 @@ cp .env.example .env     # then edit .env
 | `GLOW_RGB` | no | `FFB46E` | `RRGGBB` |
 | `IMS_URL` | no | empty | IMS API base, `https://` only, no trailing slash, e.g. `https://ims.siot.solutions/api/v1`. Empty = poller disabled |
 | `IMS_TOKEN` | with `IMS_URL` | – | device key (scope `locate:read`) |
-| `IMS_MOCK_CA` | no | 0 | `1` = bench build that trusts **only** `certs/mock_ca.pem` (see below) |
+| `IMS_MOCK_CA` | no | 0 | `1` = bench build that trusts **only** `certs/mock_ca.pem` (see below). Requires `DEV_BUILD=1` |
+| `DEV_BUILD` | no | 0 | `1` marks a bench build. `IMS_MOCK_CA=1` without it fails at configure time (and `ims_locate.c` has a matching `#error`) |
 | `WIFI2_SSID`, `WIFI2_PASSWORD` | no | – | fallback network; set both or neither |
 | `GREEN_RGB`, `RED_RGB` | no | `00FF00`, `FF0000` | in-stock / out-of-stock colours, scaled by `GLOW_BRIGHTNESS_PCT` |
 | `LED_BOOT_TEST` | no | 0 | `1` = chase drawers 1..N at boot |
@@ -130,7 +131,7 @@ Any wrong or missing bearer token gets `401`.
 This differs from "an extra CA": in ESP-IDF 5.5.4 `esp-tls` uses the certificate bundle *or* a supplied CA, not both
 (`esp_tls_mbedtls.c`: the bundle branch is tested first, the custom CA is an `else if`). A mock build therefore
 cannot reach the real IMS. The certificate must have a SAN for the host or IP in `IMS_URL`. A production build
-(`IMS_MOCK_CA=0`) uses only the certificate bundle, with no insecure fallback.
+(`IMS_MOCK_CA=0`) uses only the certificate bundle, with no insecure fallback. The mode is logged at boot: `TLS trust: MOCK CA ONLY (dev build, ...)` (warning) or `TLS trust: certificate bundle`.
 
 ## Layout
 
@@ -212,13 +213,12 @@ Row 7 used a serial-RTS reset (`POWERON_RESET`), not an unplug.
 
 ## Known risks
 
-- **Flash headroom (PROVEN by build output):** the production build (full certificate bundle, `IMS_MOCK_CA=0`) leaves 0xad60 bytes (~4%) free in the 1 MB app partition; the mock build leaves ~11%. Options when it gets tighter: `CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN` (smaller bundle), or a custom partition table (the chip reports 4 MB flash; the image header says 2 MB). Not changed yet.
-- **Level shifter absent** (operator-reported): see Bench results.
+- **Flash layout (PROVEN):** the chip reports 4 MB (`esptool flash_id`: "Detected flash size: 4MB"). [partitions.csv](partitions.csv) gives one 3 MB app partition at 0x10000 (0x310000..0x3FFFFF unused). Free app space measured from build output: production 68% (0x20ad10 B), mock/dev 70% (0x21c150 B), no-IMS 74% (0x2355e0 B); it was ~4% / 11% with the old 1 MB partition. No OTA partition yet.
+- **Level shifter absent** (operator-reported): see Bench results. The operator will fit one later (74AHCT125 suggested); until then the data line is 3.3 V direct.
 
 ## Not done yet
 
 - On-board test of the poller against the mock and the real IMS (Step 4), plus the overnight soak.
-- Flash size: the board reports 4 MB but the image header is 2 MB; the extra space is unused.
 
 ## Recovering a board
 

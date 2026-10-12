@@ -46,6 +46,13 @@ menu "SIOT IMS NeoPixel"
             set so the board can talk to tools/mock_ims.py. A production build leaves this
             off and trusts only the certificate bundle, with no insecure fallback.
 
+    config SIOT_DEV_BUILD
+        bool "Dev build (required for IMS_MOCK_CA)"
+        default n
+        help
+            Generated from .env (DEV_BUILD=1). Marks the image as a bench build. A build with
+            SIOT_IMS_MOCK_CA but without this fails to compile.
+
     config SIOT_DEVICE_ID
         string "Device ID presented to IMS"
         default ""

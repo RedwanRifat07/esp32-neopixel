@@ -22,6 +22,10 @@
 #define BACKOFF_MAX_MS 60000
 #define AUTH_BACKOFF_MS (5 * 60 * 1000)
 
+#if CONFIG_SIOT_IMS_MOCK_CA && !CONFIG_SIOT_DEV_BUILD
+#error "IMS_MOCK_CA trusts only the mock CA; it must be an explicit dev build (DEV_BUILD=1)"
+#endif
+
 #if CONFIG_SIOT_IMS_MOCK_CA
 extern const char mock_ca_pem_start[] asm("_binary_mock_ca_pem_start");
 #endif
@@ -231,5 +235,14 @@ esp_err_t ims_locate_start(void)
         ESP_LOGW(TAG, "IMS_URL/IMS_TOKEN not set: poller disabled");
         return ESP_OK;
     }
+#if CONFIG_SIOT_IMS_MOCK_CA
+    ESP_LOGW(TAG, "TLS trust: MOCK CA ONLY (dev build, cannot reach the real IMS)");
+#else
+#if CONFIG_SIOT_DEV_BUILD
+    ESP_LOGI(TAG, "TLS trust: certificate bundle (dev build)");
+#else
+    ESP_LOGI(TAG, "TLS trust: certificate bundle");
+#endif
+#endif
     return xTaskCreate(poller_task, "ims_locate", 10240, NULL, 4, NULL) == pdPASS ? ESP_OK : ESP_ERR_NO_MEM;
 }
