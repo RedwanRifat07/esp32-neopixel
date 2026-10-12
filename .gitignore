@@ -7,3 +7,4 @@ managed_components/
 sdkconfig
 sdkconfig.local
 sdkconfig.old
+!.env.example
