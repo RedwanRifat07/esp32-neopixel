@@ -120,8 +120,10 @@ Both suites were run and pass (Python: 13 tests; C: `led_color OK`).
 |---|---|
 | Boot chase | PROVEN in the serial log: pixels 1–5 = A1–A5 on, then off |
 | Free heap after Wi-Fi + web server | PROVEN: 212788 B (min ever 212788 B) |
-| Physical drawer lit by each pixel | UNKNOWN: needs eyes on the cabinet |
-| Supply and level shifter | UNKNOWN: not reported yet |
+| Physical drawer lit by each pixel | PROVEN (observed by the operator, 2026-10-12): pixel 1..5 = A1..A5, matches `DRAWER_MAP` |
+| Supply | Operator-reported: separate 5 V adapter/charger. Voltage and current rating not given (UNKNOWN); nothing measured |
+| Level shifter | Operator-reported: none, GPIO 18 wired straight to the strip data-in. 3.3 V data into a 5 V strip is marginal: a risk if flicker or wrong colours appear |
+| Common ground | Operator-reported: adapter, strip and ESP32 grounds are joined |
 | Brightness cap | 25% of `GLOW_RGB` by default (ASSUMED safe for 5 pixels; supply not measured) |
 
 ## Not done yet
