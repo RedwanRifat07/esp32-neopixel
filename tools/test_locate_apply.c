@@ -82,7 +82,9 @@ int main(void)
                          "{\"seq\":\"1\",\"drawers\":[]}", "{\"seq\":-1,\"drawers\":[]}",
                          "{\"seq\":1.5,\"drawers\":[]}", "{\"seq\":1,\"drawers\":{}}",
                          "{\"seq\":1,\"ttlMs\":\"x\",\"drawers\":[]}", "{\"seq\":1,\"ttlMs\":5,\"drawers\":[]}",
-                         "{\"seq\":1,\"ttlMs\":99999999,\"drawers\":[]}", "<html>Cloudflare</html>"};
+                         "{\"seq\":1,\"ttlMs\":99999999,\"drawers\":[]}",
+                         "{\"seq\":1e300,\"drawers\":[]}", "{\"seq\":1,\"ttlMs\":1e300,\"drawers\":[]}",
+                         "{\"seq\":-1e300,\"drawers\":[]}", "{\"seq\":1,\"ttlMs\":-1e300,\"drawers\":[]}", "<html>Cloudflare</html>"};
     for (unsigned i = 0; i < sizeof(bad) / sizeof(bad[0]); i++) {
         fill(st, R);
         locate_rc_t rc = APPLY(bad[i], 'A', MAP_A, st, &info);

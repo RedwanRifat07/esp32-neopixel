@@ -156,7 +156,7 @@ cc -I main -I $J tools/test_locate_apply.c main/locate_apply.c $J/cJSON.c -o /tm
 cc -o /tmp/test_led_color tools/test_led_color.c && /tmp/test_led_color   # colour scaling (host)
 ```
 
-All suites were run and pass (Python: 16 env-tool + 13 mock-IMS tests; C: `led_color OK`, `locate_apply OK (24 state checks)`).
+All suites were run and pass (Python: 16 env-tool + 13 mock-IMS tests; C: `led_color OK`, `locate_apply OK (28 state checks)`).
 
 ## Security notes
 

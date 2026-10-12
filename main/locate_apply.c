@@ -1,10 +1,19 @@
 #include "locate_apply.h"
 
+#include <stdbool.h>
 #include <string.h>
 
 #include "cJSON.h"
 
 #define MAX_EVENT_BYTES 8192
+#define MAX_SEQ 9007199254740992.0 /* 2^53: largest integer a JSON double holds exactly */
+
+/* True if v is a whole number in [lo, hi]. The range test comes first so the integer cast is
+ * never applied to an out-of-range double (undefined behaviour). */
+static bool whole_in_range(double v, double lo, double hi)
+{
+    return v >= lo && v <= hi && v == (double)(int64_t)v;
+}
 
 /* Pixel index of `zone` in the comma-separated map, or -1. Exact match, no allocation. */
 static int pixel_of(const char *map_csv, const char *zone, size_t n_pixels)
@@ -43,14 +52,14 @@ locate_rc_t locate_apply(const char *json, size_t len, char cabinet, const char 
     const cJSON *seq = cJSON_GetObjectItemCaseSensitive(root, "seq");
     const cJSON *drawers = cJSON_GetObjectItemCaseSensitive(root, "drawers");
     const cJSON *ttl = cJSON_GetObjectItemCaseSensitive(root, "ttlMs");
-    if (!cJSON_IsObject(root) || !cJSON_IsNumber(seq) || seq->valuedouble < 0 ||
-        seq->valuedouble != (double)(int64_t)seq->valuedouble || !cJSON_IsArray(drawers)) {
+    if (!cJSON_IsObject(root) || !cJSON_IsNumber(seq) || !whole_in_range(seq->valuedouble, 0, MAX_SEQ) ||
+        !cJSON_IsArray(drawers)) {
         goto done;
     }
     uint32_t ttl_ms = LOCATE_DEFAULT_TTL_MS;
     if (ttl) {
-        if (!cJSON_IsNumber(ttl) || ttl->valuedouble != (double)(int64_t)ttl->valuedouble ||
-            ttl->valuedouble < LOCATE_MIN_TTL_MS || ttl->valuedouble > LOCATE_MAX_TTL_MS) {
+        if (!cJSON_IsNumber(ttl) ||
+            !whole_in_range(ttl->valuedouble, LOCATE_MIN_TTL_MS, LOCATE_MAX_TTL_MS)) {
             goto done;
         }
         ttl_ms = (uint32_t)ttl->valuedouble;

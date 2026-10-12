@@ -193,7 +193,10 @@ static void poller_task(void *arg)
                 } else {
                     seq = info.seq;
                     ESP_LOGI(TAG, "event seq %lld, %u drawers, http 200", (long long)seq, info.drawer_count);
-                    led_glow_set_states(states, CONFIG_SIOT_LED_COUNT, info.ttl_ms);
+                    esp_err_t le = led_glow_set_states(states, CONFIG_SIOT_LED_COUNT, info.ttl_ms);
+                    if (le != ESP_OK) {
+                        ESP_LOGW(TAG, "LED update dropped: %s", esp_err_to_name(le));
+                    }
                 }
                 note_ok(seq);
                 set_state("ok");
