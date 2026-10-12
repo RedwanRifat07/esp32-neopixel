@@ -121,12 +121,18 @@ def build_config(values):
             errors.append("DRAWER_MAP entry count must equal LED_COUNT")
         lines.append(f"CONFIG_SIOT_DRAWER_MAP={kconfig_str(','.join(codes))}")
     mock_ca = values.get("IMS_MOCK_CA", "0")
+    dev = values.get("DEV_BUILD", "0")
+    if dev not in ("0", "1"):
+        errors.append("DEV_BUILD must be 0 or 1")
     if mock_ca not in ("0", "1"):
         errors.append("IMS_MOCK_CA must be 0 or 1")
+    elif mock_ca == "1" and dev != "1":
+        errors.append("IMS_MOCK_CA=1 trusts only the mock CA and needs DEV_BUILD=1 to say so explicitly")
     elif mock_ca == "1":
         lines.append("CONFIG_SIOT_IMS_MOCK_CA=y")
     else:
         lines.append("# CONFIG_SIOT_IMS_MOCK_CA is not set")
+    lines.append("CONFIG_SIOT_DEV_BUILD=y" if dev == "1" else "# CONFIG_SIOT_DEV_BUILD is not set")
     for key, sym, default in (("GLOW_RGB", "SIOT_GLOW_RGB", RGB_DEFAULT),
                               ("GREEN_RGB", "SIOT_GREEN_RGB", "00FF00"),
                               ("RED_RGB", "SIOT_RED_RGB", "FF0000")):

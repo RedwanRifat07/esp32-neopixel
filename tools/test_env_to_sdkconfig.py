@@ -39,9 +39,21 @@ class Tests(unittest.TestCase):
 
     def test_mock_ca_flag(self):
         self.assertIn("# CONFIG_SIOT_IMS_MOCK_CA is not set", e.build_config(VALID))
-        self.assertIn("CONFIG_SIOT_IMS_MOCK_CA=y", e.build_config(dict(VALID, IMS_MOCK_CA="1")))
+        out = e.build_config(dict(VALID, IMS_MOCK_CA="1", DEV_BUILD="1"))
+        self.assertIn("CONFIG_SIOT_IMS_MOCK_CA=y", out)
+        self.assertIn("CONFIG_SIOT_DEV_BUILD=y", out)
         with self.assertRaises(e.EnvError):
-            e.build_config(dict(VALID, IMS_MOCK_CA="yes"))
+            e.build_config(dict(VALID, IMS_MOCK_CA="yes", DEV_BUILD="1"))
+
+    def test_mock_ca_requires_explicit_dev_build(self):
+        for extra in ({"IMS_MOCK_CA": "1"}, {"IMS_MOCK_CA": "1", "DEV_BUILD": "0"}):
+            with self.assertRaises(e.EnvError, msg=str(extra)):
+                e.build_config(dict(VALID, **extra))
+        with self.assertRaises(e.EnvError):
+            e.build_config(dict(VALID, DEV_BUILD="maybe"))
+        out = e.build_config(VALID)
+        self.assertIn("# CONFIG_SIOT_DEV_BUILD is not set", out)
+        self.assertIn("# CONFIG_SIOT_IMS_MOCK_CA is not set", out)
 
     def test_cabinet_and_map(self):
         out = e.build_config(VALID)
