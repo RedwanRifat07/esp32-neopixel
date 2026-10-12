@@ -1,5 +1,6 @@
 #include "esp_check.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "led_glow.h"
@@ -13,8 +14,8 @@ static const char *TAG = "app";
 void app_main(void)
 {
     /* Secrets (Wi-Fi password, tokens, IMS URL) are deliberately never logged. */
-    ESP_LOGI(TAG, "config: led_gpio=%d drawers=%d poll=%dms glow=%dms brightness=%d%%",
-             CONFIG_SIOT_LED_GPIO, LED_GLOW_DRAWERS, CONFIG_SIOT_POLL_INTERVAL_MS,
+    ESP_LOGI(TAG, "config: cabinet=%s led_gpio=%d drawers=%d poll=%dms glow=%dms brightness=%d%%",
+             CONFIG_SIOT_CABINET, CONFIG_SIOT_LED_GPIO, CONFIG_SIOT_LED_COUNT, CONFIG_SIOT_POLL_INTERVAL_MS,
              CONFIG_SIOT_GLOW_MS, CONFIG_SIOT_GLOW_BRIGHTNESS_PCT);
 
     /* The default NVS partition only holds Wi-Fi calibration data here. */
@@ -29,8 +30,8 @@ void app_main(void)
 
 #if CONFIG_SIOT_LED_BOOT_TEST
     /* Wiring check: light drawers 1..N one after another. */
-    ESP_LOGW(TAG, "boot test: chasing drawers 1..%d", LED_GLOW_DRAWERS);
-    for (unsigned d = 1; d <= LED_GLOW_DRAWERS; d++) {
+    ESP_LOGW(TAG, "boot test: chasing drawers 1..%d", CONFIG_SIOT_LED_COUNT);
+    for (unsigned d = 1; d <= CONFIG_SIOT_LED_COUNT; d++) {
         ESP_ERROR_CHECK_WITHOUT_ABORT(led_glow_trigger(d));
         vTaskDelay(pdMS_TO_TICKS(300));
     }
@@ -41,4 +42,6 @@ void app_main(void)
         ESP_LOGW(TAG, "still waiting for Wi-Fi...");
     }
     ESP_ERROR_CHECK(web_server_start());
+    ESP_LOGI(TAG, "free heap after Wi-Fi+web: %u B (min ever %u B)", (unsigned)esp_get_free_heap_size(),
+             (unsigned)esp_get_minimum_free_heap_size());
 }

@@ -91,7 +91,7 @@ static esp_err_t status_get(httpd_req_t *req)
 {
     char body[80];
     snprintf(body, sizeof(body), "{\"drawers\":%d,\"glow_ms\":%d,\"auth\":%s}",
-             LED_GLOW_DRAWERS, CONFIG_SIOT_GLOW_MS, token_required() ? "true" : "false");
+             CONFIG_SIOT_LED_COUNT, CONFIG_SIOT_GLOW_MS, token_required() ? "true" : "false");
     return send_json(req, "200 OK", body);
 }
 
@@ -129,7 +129,7 @@ static esp_err_t glow_post(httpd_req_t *req)
     esp_err_t err = (drawer >= 1) ? led_glow_trigger((unsigned)drawer) : ESP_ERR_INVALID_ARG;
     if (err == ESP_ERR_INVALID_ARG) {
         char msg[64];
-        snprintf(msg, sizeof(msg), "{\"error\":\"drawer must be 1..%d\"}", LED_GLOW_DRAWERS);
+        snprintf(msg, sizeof(msg), "{\"error\":\"drawer must be 1..%d\"}", CONFIG_SIOT_LED_COUNT);
         return send_json(req, "400 Bad Request", msg);
     }
     if (err != ESP_OK) {

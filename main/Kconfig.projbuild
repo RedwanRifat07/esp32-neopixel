@@ -29,24 +29,26 @@ menu "SIOT IMS NeoPixel"
         default ""
 
     config SIOT_LED_GPIO
-        int "NeoPixel strip 1 data GPIO (drawers 1..LED_COUNT)"
+        int "NeoPixel data GPIO"
         range 0 33
         default 18
 
     config SIOT_LED_COUNT
-        int "NeoPixel count on strip 1"
+        int "NeoPixel count (one per drawer)"
         range 1 30
         default 5
 
-    config SIOT_LED2_GPIO
-        int "NeoPixel strip 2 data GPIO (must differ from strip 1)"
-        range 0 33
-        default 19
+    config SIOT_CABINET
+        string "Cabinet letter (A or B)"
+        default "A"
+        help
+            Generated from .env (CABINET).
 
-    config SIOT_LED2_COUNT
-        int "NeoPixel count on strip 2 (0 = unused)"
-        range 0 30
-        default 4
+    config SIOT_DRAWER_MAP
+        string "Physical drawer of each pixel, in pixel order"
+        default "A1,A2,A3,A4,A5"
+        help
+            Generated from .env (DRAWER_MAP). Codes start with the cabinet letter.
 
     config SIOT_POLL_INTERVAL_MS
         int "IMS poll interval (ms)"

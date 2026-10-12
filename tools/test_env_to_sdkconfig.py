@@ -8,32 +8,35 @@ import env_to_sdkconfig as e  # noqa: E402
 
 VALID = {
     "WIFI_SSID": "lab", "WIFI_PASSWORD": 'p"w\\d-long', "IMS_URL": "https://ims.local/x",
-    "IMS_TOKEN": "tok", "DEVICE_ID": "esp-1", "LED_COUNT": "12",
+    "IMS_TOKEN": "tok", "DEVICE_ID": "esp-1", "LED_COUNT": "5",
+    "CABINET": "A", "DRAWER_MAP": "A1,A2,A3,A4,A5",
 }
 
 
 class Tests(unittest.TestCase):
-    def test_second_strip(self):
-        out = e.build_config(dict(VALID, LED_COUNT="5", LED2_COUNT="4"))
-        self.assertIn("CONFIG_SIOT_LED_COUNT=5", out)
-        self.assertIn("CONFIG_SIOT_LED2_COUNT=4", out)
-        self.assertIn("CONFIG_SIOT_LED2_GPIO=19", out)
+    def test_cabinet_and_map(self):
+        out = e.build_config(VALID)
+        self.assertIn('CONFIG_SIOT_CABINET="A"', out)
+        self.assertIn('CONFIG_SIOT_DRAWER_MAP="A1,A2,A3,A4,A5"', out)
 
-    def test_second_strip_defaults_off(self):
-        self.assertIn("CONFIG_SIOT_LED2_COUNT=0", e.build_config(VALID))
+    def test_map_rejections(self):
+        for k, v in (("DRAWER_MAP", "A1,A2,A3,A4"), ("DRAWER_MAP", "A1,A2,A3,A4,A4"),
+                     ("DRAWER_MAP", "B1,B2,B3,B4,B5"), ("CABINET", "C"), ("CABINET", "")):
+            with self.assertRaises(e.EnvError, msg=f"{k}={v}"):
+                e.build_config(dict(VALID, **{k: v}))
+        for k in ("CABINET", "DRAWER_MAP"):
+            bad = dict(VALID); del bad[k]
+            with self.assertRaises(e.EnvError):
+                e.build_config(bad)
 
-    def test_second_strip_same_gpio_rejected(self):
-        with self.assertRaises(e.EnvError):
-            e.build_config(dict(VALID, LED2_COUNT="4", LED2_GPIO="18"))
-
-    def test_total_over_30_rejected(self):
-        with self.assertRaises(e.EnvError):
-            e.build_config(dict(VALID, LED_COUNT="20", LED2_COUNT="11"))
+    def test_map_whitespace_trimmed(self):
+        out = e.build_config(dict(VALID, DRAWER_MAP="A1, A2 ,A3,A4,A5"))
+        self.assertIn('"A1,A2,A3,A4,A5"', out)
 
     def test_valid_defaults(self):
         out = e.build_config(VALID)
         self.assertIn("CONFIG_SIOT_LED_GPIO=18", out)
-        self.assertIn("CONFIG_SIOT_LED_COUNT=12", out)
+        self.assertIn("CONFIG_SIOT_LED_COUNT=5", out)
         self.assertIn("CONFIG_SIOT_GLOW_RGB=0xFFB46E", out)
         self.assertIn(r'CONFIG_SIOT_WIFI_PASSWORD="p\"w\\d-long"', out)
 
@@ -59,9 +62,10 @@ class Tests(unittest.TestCase):
                 e.build_config(dict(VALID, **{k: v}))
 
     def test_ims_and_web_token_optional(self):
-        minimal = {"WIFI_SSID": "lab", "WIFI_PASSWORD": "longenough", "LED_COUNT": "9"}
+        minimal = {"WIFI_SSID": "lab", "WIFI_PASSWORD": "longenough", "LED_COUNT": "5",
+                   "CABINET": "A", "DRAWER_MAP": "A1,A2,A3,A4,A5"}
         out = e.build_config(minimal)
-        self.assertIn("CONFIG_SIOT_LED_COUNT=9", out)
+        self.assertIn("CONFIG_SIOT_LED_COUNT=5", out)
         self.assertNotIn("SIOT_IMS", out)
         self.assertNotIn("SIOT_WEB_TOKEN", out)
         self.assertIn('CONFIG_SIOT_WEB_TOKEN="secret-token"',
