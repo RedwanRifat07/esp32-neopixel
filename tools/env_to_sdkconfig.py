@@ -22,8 +22,6 @@ STRING_KEYS = {
 INT_KEYS = {
     "LED_COUNT": ("SIOT_LED_COUNT", None, 1, 30),
     "LED_GPIO": ("SIOT_LED_GPIO", 18, 0, 33),
-    "LED2_COUNT": ("SIOT_LED2_COUNT", 0, 0, 30),
-    "LED2_GPIO": ("SIOT_LED2_GPIO", 19, 0, 33),
     "POLL_INTERVAL_MS": ("SIOT_POLL_INTERVAL_MS", 5000, 1000, 3600000),
     "GLOW_MS": ("SIOT_GLOW_MS", 5000, 100, 600000),
     "GLOW_BRIGHTNESS_PCT": ("SIOT_GLOW_BRIGHTNESS_PCT", 25, 1, 100),
@@ -98,15 +96,28 @@ def build_config(values):
         if not lo <= num <= hi:
             errors.append(f"{key} must be in {lo}..{hi}")
             continue
-        if key in ("LED_GPIO", "LED2_GPIO") and num in FORBIDDEN_GPIO:
+        if key == "LED_GPIO" and num in FORBIDDEN_GPIO:
             errors.append(f"LED_GPIO {num} is a strapping/flash/UART pin; choose another")
             continue
         lines.append(f"CONFIG_{sym}={num}")
         parsed[key] = num
-    if parsed.get("LED2_COUNT") and parsed.get("LED_GPIO") == parsed.get("LED2_GPIO"):
-        errors.append("LED2_GPIO must differ from LED_GPIO when LED2_COUNT > 0")
-    if parsed.get("LED_COUNT", 0) + parsed.get("LED2_COUNT", 0) > 30:
-        errors.append("LED_COUNT + LED2_COUNT must be at most 30")
+    cabinet = values.get("CABINET", "")
+    if cabinet not in ("A", "B"):
+        errors.append("CABINET must be A or B")
+    else:
+        lines.append(f"CONFIG_SIOT_CABINET={kconfig_str(cabinet)}")
+    dmap = values.get("DRAWER_MAP", "")
+    codes = [c.strip() for c in dmap.split(",")] if dmap.strip() else []
+    if not codes:
+        errors.append("DRAWER_MAP is required (e.g. A1,A2,A3,A4,A5)")
+    else:
+        if cabinet in ("A", "B") and not all(re.fullmatch(cabinet + r"[1-9][0-9]?", c) for c in codes):
+            errors.append(f"DRAWER_MAP codes must look like {cabinet}1, {cabinet}2, ...")
+        if len(set(codes)) != len(codes):
+            errors.append("DRAWER_MAP has duplicate codes")
+        if "LED_COUNT" in parsed and len(codes) != parsed["LED_COUNT"]:
+            errors.append("DRAWER_MAP entry count must equal LED_COUNT")
+        lines.append(f"CONFIG_SIOT_DRAWER_MAP={kconfig_str(','.join(codes))}")
     rgb = values.get("GLOW_RGB", RGB_DEFAULT).removeprefix("0x").removeprefix("#")
     if re.fullmatch(r"[0-9A-Fa-f]{6}", rgb):
         lines.append(f"CONFIG_SIOT_GLOW_RGB=0x{rgb.upper()}")
