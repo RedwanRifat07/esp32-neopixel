@@ -12,7 +12,7 @@ its pixel glow for a fixed time, then switch off on its own timer.
 | Flash + boot on a real ESP32 | PROVEN | write verified, boot log shows config, Wi-Fi join and `web: listening on port 80` |
 | HTTP API (`/api/status`, `/api/glow`) | PROVEN | exercised with `curl` against the running board |
 | Pixels physically lighting on both strips | UNKNOWN | firmware logs success, but the LEDs were not observed by the author of this README |
-| IMS poller | BUILT, bench-tested only against an unreachable server | connect failure + backoff (2 s, 4 s, 8 s) seen in the serial log; success path, event handling and TTL on the board are NOT yet exercised (Step 4) |
+| IMS poller | PROVEN against the mock IMS on Board A (rows 1-8 below) | serial log + mock log, 2026-10-12. Not yet against the real IMS, not yet Board B, soak not run |
 | Behaviour on ESP-IDF 6.0 | UNKNOWN | only v5.5.4 was built |
 
 ## Hardware
@@ -175,6 +175,37 @@ All suites were run and pass (Python: 16 env-tool + 13 mock-IMS tests; C: `led_c
 | Level shifter | Operator-reported: none, GPIO 18 wired straight to the strip data-in. 3.3 V data into a 5 V strip is marginal: a risk if flicker or wrong colours appear |
 | Common ground | Operator-reported: adapter, strip and ESP32 grounds are joined |
 | Brightness cap | 25% of `GLOW_RGB` by default (ASSUMED safe for 5 pixels; supply not measured) |
+
+## Step 4 bench: Board A vs mock IMS (2026-10-12)
+
+Mock server on the Mac (`tools/mock_ims.py`, HTTPS, self-signed cert), board on the same Wi-Fi. "Latency" is
+host time of the POST to host time the serial line `state set` was received, so it includes USB-serial delay.
+**What was observed is the firmware's log, not the LEDs**: whether the pixel physically changed colour was NOT
+checked by the author (UNKNOWN until an operator confirms).
+
+| # | Event | Board A result (serial log) | Latency |
+|---|---|---|---|
+| 1 | B2 green | `state set: 0 lit` (ignored, other cabinet) | 0.26 s |
+| 2 | A4 red | `1 lit`; `drawer 4 (A4) off` 15.01 s later (board uptime stamps) | 0.33 s |
+| 3 | A2 green + B4 red | `1 lit` (A2 only); A2 off after 15 s | 0.23 s |
+| 3b | A2 green, then A5 red 3 s later | second event replaced the first; only A5 expired, 15 s after its own set | 0.29 s / 0.29 s |
+| 4 | empty event while A1 lit (ttl 60 s) | `0 lit` | 0.16 s |
+| 5 | unknown zone R3 | `0 lit` | 0.14 s |
+| 6 | mock stopped 2 min, restarted (seq reset to 0) | backoff 2, 4, 8, 16, 32, 60 s; `synced at seq 0` 3.2 s after the restart; next event applied, no reboot | – |
+| 7 | reset while A1 lit (ttl 120 s) | boot shows no `state set`; `synced at seq 2` | – |
+| 8 | wrong key | `http 401` + one `key rejected; retrying in 5 min` (E level); next request 300.8 s later | – |
+
+Notes on row 8: the `http 401` warning is printed on every attempt (once per 5 min); the *error* line is printed once per episode.
+Row 7 used a serial-RTS reset (`POWERON_RESET`), not an unplug.
+
+| Gate item | State |
+|---|---|
+| 8/8 on Board A | PASS by log (LED output unobserved) |
+| 8/8 on Board B | NOT RUN (no second board) |
+| Real IMS | NOT RUN (no device key yet) |
+| Overnight soak, heap every 10 min | NOT RUN |
+| 30-minute serial capture, no secret | PARTIAL: 682 s captured; 0 occurrences of the IMS key, the Wi-Fi password or "Bearer" in the serial and mock logs |
+| Free heap after Wi-Fi + web | 191412 B and 191436 B (two boots); the 10-minute heap line not yet observed |
 
 ## Known risks
 
