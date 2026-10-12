@@ -1,6 +1,8 @@
 #include "esp_check.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_timer.h"
+#include "ims_locate.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "led_glow.h"
@@ -10,6 +12,13 @@
 #include "wifi_sta.h"
 
 static const char *TAG = "app";
+
+/* Soak evidence: free/min-ever heap every 10 minutes. */
+static void heap_log_cb(void *arg)
+{
+    ESP_LOGI(TAG, "heap: free %u B, min ever %u B", (unsigned)esp_get_free_heap_size(),
+             (unsigned)esp_get_minimum_free_heap_size());
+}
 
 void app_main(void)
 {
@@ -42,6 +51,12 @@ void app_main(void)
         ESP_LOGW(TAG, "still waiting for Wi-Fi...");
     }
     ESP_ERROR_CHECK(web_server_start());
+    ESP_ERROR_CHECK(ims_locate_start());
+
+    static esp_timer_handle_t heap_timer;
+    const esp_timer_create_args_t hargs = {.callback = heap_log_cb, .name = "heap_log"};
+    ESP_ERROR_CHECK(esp_timer_create(&hargs, &heap_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(heap_timer, 10ULL * 60 * 1000000));
     ESP_LOGI(TAG, "free heap after Wi-Fi+web: %u B (min ever %u B)", (unsigned)esp_get_free_heap_size(),
              (unsigned)esp_get_minimum_free_heap_size());
 }

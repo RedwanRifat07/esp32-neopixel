@@ -12,17 +12,31 @@ menu "SIOT IMS NeoPixel"
         help
             Generated from .env (WIFI_PASSWORD). Compiled into the flash image.
 
-    config SIOT_IMS_URL
-        string "IMS poll URL (optional until the IMS poller exists)"
+    config SIOT_WIFI2_SSID
+        string "Fallback Wi-Fi SSID (optional)"
         default ""
         help
-            Generated from .env (IMS_URL).
+            Generated from .env (WIFI2_SSID). Tried after 3 failed connects to the first network.
+
+    config SIOT_WIFI2_PASSWORD
+        string "Fallback Wi-Fi password"
+        default ""
+        help
+            Generated from .env (WIFI2_PASSWORD). Compiled into the flash image.
+
+    config SIOT_IMS_URL
+        string "IMS API base URL, https only (empty = poller disabled)"
+        default ""
+        help
+            Generated from .env (IMS_URL), e.g. https://ims.siot.solutions/api/v1. The board
+            appends /locate/latest and /locate/next.
 
     config SIOT_IMS_TOKEN
         string "IMS auth token"
         default ""
         help
-            Generated from .env (IMS_TOKEN). Compiled into the flash image.
+            Generated from .env (IMS_TOKEN), the device key (scope locate:read). Compiled into
+            the flash image; never logged.
 
     config SIOT_IMS_MOCK_CA
         bool "Trust the mock IMS CA (bench builds only)"
@@ -78,6 +92,16 @@ menu "SIOT IMS NeoPixel"
         range 0x000000 0xFFFFFF
         default 0xFFB46E
 
+    config SIOT_GREEN_RGB
+        hex "In-stock colour (0xRRGGBB)"
+        range 0x000000 0xFFFFFF
+        default 0x00FF00
+
+    config SIOT_RED_RGB
+        hex "Out-of-stock colour (0xRRGGBB)"
+        range 0x000000 0xFFFFFF
+        default 0xFF0000
+
     config SIOT_WEB_TOKEN
         string "Web test page access token (empty = no auth)"
         default ""
@@ -87,7 +111,7 @@ menu "SIOT IMS NeoPixel"
 
     config SIOT_LED_BOOT_TEST
         bool "Wiring test: chase drawers 1..N at boot"
-        default y
+        default n
         help
             Lights drawers one after another at startup to verify wiring. Disable once
             the IMS poller drives the LEDs.

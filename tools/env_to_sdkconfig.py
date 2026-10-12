@@ -13,6 +13,8 @@ FORBIDDEN_GPIO = {0, 1, 2, 3, 5, 6, 7, 8, 9, 10, 11, 12, 15}
 STRING_KEYS = {
     "WIFI_SSID": ("SIOT_WIFI_SSID", True, 1, 32, None),
     "WIFI_PASSWORD": ("SIOT_WIFI_PASSWORD", True, 8, 63, None),
+    "WIFI2_SSID": ("SIOT_WIFI2_SSID", False, 1, 32, None),
+    "WIFI2_PASSWORD": ("SIOT_WIFI2_PASSWORD", False, 8, 63, None),
     "WEB_TOKEN": ("SIOT_WEB_TOKEN", False, 8, 64, r"[\x21-\x7e]+"),
     "IMS_URL": ("SIOT_IMS_URL", False, 1, 512, None),
     "IMS_TOKEN": ("SIOT_IMS_TOKEN", False, 1, 512, None),
@@ -125,14 +127,27 @@ def build_config(values):
         lines.append("CONFIG_SIOT_IMS_MOCK_CA=y")
     else:
         lines.append("# CONFIG_SIOT_IMS_MOCK_CA is not set")
-    rgb = values.get("GLOW_RGB", RGB_DEFAULT).removeprefix("0x").removeprefix("#")
-    if re.fullmatch(r"[0-9A-Fa-f]{6}", rgb):
-        lines.append(f"CONFIG_SIOT_GLOW_RGB=0x{rgb.upper()}")
+    for key, sym, default in (("GLOW_RGB", "SIOT_GLOW_RGB", RGB_DEFAULT),
+                              ("GREEN_RGB", "SIOT_GREEN_RGB", "00FF00"),
+                              ("RED_RGB", "SIOT_RED_RGB", "FF0000")):
+        rgb = values.get(key, default).removeprefix("0x").removeprefix("#")
+        if re.fullmatch(r"[0-9A-Fa-f]{6}", rgb):
+            lines.append(f"CONFIG_{sym}=0x{rgb.upper()}")
+        else:
+            errors.append(f"{key} must be 6 hex digits (RRGGBB)")
+    boot = values.get("LED_BOOT_TEST", "0")
+    if boot not in ("0", "1"):
+        errors.append("LED_BOOT_TEST must be 0 or 1")
     else:
-        errors.append("GLOW_RGB must be 6 hex digits (RRGGBB)")
+        lines.append("CONFIG_SIOT_LED_BOOT_TEST=y" if boot == "1" else "# CONFIG_SIOT_LED_BOOT_TEST is not set")
+    if bool(values.get("WIFI2_SSID", "").strip()) != bool(values.get("WIFI2_PASSWORD", "").strip()):
+        errors.append("WIFI2_SSID and WIFI2_PASSWORD must be set together")
     url = values.get("IMS_URL", "")
-    if url and not is_placeholder(url) and not re.match(r"https?://", url):
-        errors.append("IMS_URL must start with http:// or https://")
+    if url and not is_placeholder(url):
+        if not url.startswith("https://") or url.endswith("/") or " " in url:
+            errors.append("IMS_URL must be https://... with no trailing slash (no insecure fallback)")
+        if not values.get("IMS_TOKEN", "").strip() or is_placeholder(values.get("IMS_TOKEN", "")):
+            errors.append("IMS_TOKEN is required when IMS_URL is set")
     if errors:
         raise EnvError("\n".join(errors))
     return "\n".join(lines) + "\n"

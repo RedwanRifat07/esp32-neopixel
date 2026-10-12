@@ -7,7 +7,9 @@
 #include "cJSON.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
+#include "ims_locate.h"
 #include "led_glow.h"
+#include "wifi_sta.h"
 #include "sdkconfig.h"
 
 #define MAX_BODY 127
@@ -89,9 +91,23 @@ static esp_err_t index_get(httpd_req_t *req)
 
 static esp_err_t status_get(httpd_req_t *req)
 {
-    char body[80];
-    snprintf(body, sizeof(body), "{\"drawers\":%d,\"glow_ms\":%d,\"auth\":%s}",
-             CONFIG_SIOT_LED_COUNT, CONFIG_SIOT_GLOW_MS, token_required() ? "true" : "false");
+    ims_status_t ims;
+    ims_locate_get_status(&ims);
+    /* SSID is a configured network name (<= 32 bytes, no quotes/backslashes assumed in the
+     * sanitising below); the Wi-Fi password is never included. */
+    char ssid[33];
+    size_t n = 0;
+    for (const char *p = wifi_sta_ssid(); *p && n < sizeof(ssid) - 1; p++) {
+        ssid[n++] = (*p == '"' || *p == '\\' || (unsigned char)*p < 0x20) ? '_' : *p;
+    }
+    ssid[n] = '\0';
+    char body[256];
+    snprintf(body, sizeof(body),
+             "{\"cabinet\":\"%s\",\"drawers\":%d,\"glow_ms\":%d,\"auth\":%s,\"ssid\":\"%s\","
+             "\"ims\":{\"state\":\"%s\",\"lastSeq\":%lld,\"lastOkAgeS\":%ld}}",
+             CONFIG_SIOT_CABINET, CONFIG_SIOT_LED_COUNT, CONFIG_SIOT_GLOW_MS,
+             token_required() ? "true" : "false", ssid, ims.state, (long long)ims.last_seq,
+             (long)ims.last_ok_age_s);
     return send_json(req, "200 OK", body);
 }
 

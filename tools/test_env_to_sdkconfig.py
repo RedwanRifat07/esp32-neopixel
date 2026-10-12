@@ -14,6 +14,29 @@ VALID = {
 
 
 class Tests(unittest.TestCase):
+    def test_ims_url_https_only(self):
+        for url in ("http://ims.local/x", "https://ims.local/api/v1/", "https://a b"):
+            with self.assertRaises(e.EnvError, msg=url):
+                e.build_config(dict(VALID, IMS_URL=url))
+        no_tok = dict(VALID); del no_tok["IMS_TOKEN"]
+        with self.assertRaises(e.EnvError):
+            e.build_config(no_tok)
+
+    def test_wifi2_pair_and_colours_and_boot_test(self):
+        out = e.build_config(dict(VALID, WIFI2_SSID="alt", WIFI2_PASSWORD="altpassword"))
+        self.assertIn('CONFIG_SIOT_WIFI2_SSID="alt"', out)
+        for k, v in (("WIFI2_SSID", "alt"), ("WIFI2_PASSWORD", "altpassword")):
+            with self.assertRaises(e.EnvError, msg=k):
+                e.build_config(dict(VALID, **{k: v}))
+        out = e.build_config(VALID)
+        self.assertIn("CONFIG_SIOT_GREEN_RGB=0x00FF00", out)
+        self.assertIn("CONFIG_SIOT_RED_RGB=0xFF0000", out)
+        self.assertIn("# CONFIG_SIOT_LED_BOOT_TEST is not set", out)
+        self.assertIn("CONFIG_SIOT_LED_BOOT_TEST=y", e.build_config(dict(VALID, LED_BOOT_TEST="1")))
+        for k, v in (("GREEN_RGB", "nope"), ("RED_RGB", "12"), ("LED_BOOT_TEST", "yes")):
+            with self.assertRaises(e.EnvError, msg=k):
+                e.build_config(dict(VALID, **{k: v}))
+
     def test_mock_ca_flag(self):
         self.assertIn("# CONFIG_SIOT_IMS_MOCK_CA is not set", e.build_config(VALID))
         self.assertIn("CONFIG_SIOT_IMS_MOCK_CA=y", e.build_config(dict(VALID, IMS_MOCK_CA="1")))

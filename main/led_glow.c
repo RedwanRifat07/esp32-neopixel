@@ -11,16 +11,19 @@
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "led_color.h"
+#include "locate_apply.h"
 #include "led_strip.h"
 #include "sdkconfig.h"
 
 #define RMT_RESOLUTION_HZ (10 * 1000 * 1000)
 #define CMD_QUEUE_LEN 16
 
-typedef enum { CMD_GLOW, CMD_CLEAR_ALL } cmd_type_t;
+typedef enum { CMD_GLOW, CMD_CLEAR_ALL, CMD_SET_STATE } cmd_type_t;
 typedef struct {
     cmd_type_t type;
-    uint8_t pixel;
+    uint8_t pixel;                                /* CMD_GLOW */
+    uint8_t state[CONFIG_SIOT_LED_COUNT];         /* CMD_SET_STATE: led_state_t per pixel */
+    uint32_t ttl_ms;                              /* CMD_SET_STATE */
 } cmd_t;
 
 static const char *TAG = "led_glow";
@@ -43,6 +46,8 @@ static void parse_drawer_map(void)
 static void led_task(void *arg)
 {
     const led_rgb_t on = led_color_scaled(CONFIG_SIOT_GLOW_RGB, CONFIG_SIOT_GLOW_BRIGHTNESS_PCT);
+    const led_rgb_t green = led_color_scaled(CONFIG_SIOT_GREEN_RGB, CONFIG_SIOT_GLOW_BRIGHTNESS_PCT);
+    const led_rgb_t red = led_color_scaled(CONFIG_SIOT_RED_RGB, CONFIG_SIOT_GLOW_BRIGHTNESS_PCT);
     const int64_t glow_us = (int64_t)CONFIG_SIOT_GLOW_MS * 1000;
     int64_t deadline_us[CONFIG_SIOT_LED_COUNT] = {0}; /* 0 = off */
 
@@ -75,6 +80,20 @@ static void led_task(void *arg)
                 } else {
                     ESP_LOGE(TAG, "set_pixel failed for drawer %u", cmd.pixel + 1u);
                 }
+            } else if (cmd.type == CMD_SET_STATE) {
+                /* Replace the whole light set: every pixel gets its new state and, if lit, the
+                 * same expiry. Pixels that were lit and are now off are cleared. */
+                const int64_t exp_us = esp_timer_get_time() + (int64_t)cmd.ttl_ms * 1000;
+                unsigned lit = 0;
+                for (int i = 0; i < CONFIG_SIOT_LED_COUNT; i++) {
+                    const led_rgb_t *c = cmd.state[i] == LED_STATE_GREEN ? &green
+                                       : cmd.state[i] == LED_STATE_RED   ? &red : NULL;
+                    led_strip_set_pixel(s_strip, i, c ? c->r : 0, c ? c->g : 0, c ? c->b : 0);
+                    deadline_us[i] = c ? exp_us : 0;
+                    lit += c != NULL;
+                }
+                dirty = true;
+                ESP_LOGI(TAG, "state set: %u lit, ttl %u ms", lit, (unsigned)cmd.ttl_ms);
             } else { /* CMD_CLEAR_ALL */
                 for (int i = 0; i < CONFIG_SIOT_LED_COUNT; i++) {
                     if (deadline_us[i]) {
@@ -142,6 +161,18 @@ esp_err_t led_glow_trigger(unsigned drawer)
         return ESP_ERR_INVALID_ARG;
     }
     return send_cmd((cmd_t){.type = CMD_GLOW, .pixel = (uint8_t)(drawer - 1)});
+}
+
+esp_err_t led_glow_set_states(const led_state_t *states, size_t n, uint32_t ttl_ms)
+{
+    if (!states || n != CONFIG_SIOT_LED_COUNT || ttl_ms == 0) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    cmd_t cmd = {.type = CMD_SET_STATE, .ttl_ms = ttl_ms};
+    for (size_t i = 0; i < n; i++) {
+        cmd.state[i] = (uint8_t)states[i];
+    }
+    return send_cmd(cmd);
 }
 
 esp_err_t led_glow_clear_all(void)
