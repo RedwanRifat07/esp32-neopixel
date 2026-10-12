@@ -180,8 +180,7 @@ All suites were run and pass (Python: 16 env-tool + 13 mock-IMS tests; C: `led_c
 
 Mock server on the Mac (`tools/mock_ims.py`, HTTPS, self-signed cert), board on the same Wi-Fi. "Latency" is
 host time of the POST to host time the serial line `state set` was received, so it includes USB-serial delay.
-**What was observed is the firmware's log, not the LEDs**: whether the pixel physically changed colour was NOT
-checked by the author (UNKNOWN until an operator confirms).
+The table below is the firmware's log. LED output was confirmed separately by the operator (see below).
 
 | # | Event | Board A result (serial log) | Latency |
 |---|---|---|---|
@@ -195,12 +194,16 @@ checked by the author (UNKNOWN until an operator confirms).
 | 7 | reset while A1 lit (ttl 120 s) | boot shows no `state set`; `synced at seq 2` | – |
 | 8 | wrong key | `http 401` + one `key rejected; retrying in 5 min` (E level); next request 300.8 s later | – |
 
+**LED output (operator-reported, not measured):** after a visible test run (A1 green; A2 red; A3 green + A5 red;
+empty event; B2 green) the operator reported the LEDs "working fine". The reply was a single sentence, so per-step
+detail (which pixel, colour accuracy, off times) was not itemised. Board status afterwards: `ims.state` ok, `lastSeq` 5.
+
 Notes on row 8: the `http 401` warning is printed on every attempt (once per 5 min); the *error* line is printed once per episode.
 Row 7 used a serial-RTS reset (`POWERON_RESET`), not an unplug.
 
 | Gate item | State |
 |---|---|
-| 8/8 on Board A | PASS by log (LED output unobserved) |
+| 8/8 on Board A | PASS by log. LED output: operator-reported working (2026-10-12, 15:36 +06), see below |
 | 8/8 on Board B | NOT RUN (no second board) |
 | Real IMS | NOT RUN (no device key yet) |
 | Overnight soak, heap every 10 min | NOT RUN |
