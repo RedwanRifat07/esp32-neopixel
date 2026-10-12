@@ -24,6 +24,14 @@ menu "SIOT IMS NeoPixel"
         help
             Generated from .env (IMS_TOKEN). Compiled into the flash image.
 
+    config SIOT_IMS_MOCK_CA
+        bool "Trust the mock IMS CA (bench builds only)"
+        default n
+        help
+            Generated from .env (IMS_MOCK_CA=1). Adds the mock server's CA to the trusted
+            set so the board can talk to tools/mock_ims.py. A production build leaves this
+            off and trusts only the certificate bundle, with no insecure fallback.
+
     config SIOT_DEVICE_ID
         string "Device ID presented to IMS"
         default ""

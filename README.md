@@ -87,6 +87,31 @@ curl -X POST -H 'Content-Type: application/json' -d '{"drawer":3}' http://<board
 Several drawers can glow at once, each with its own timer; re-triggering a glowing drawer restarts
 its timer.
 
+## Mock IMS (bench)
+
+[tools/mock_ims.py](tools/mock_ims.py) is a stdlib-only stand-in for the IMS locate service. The board is
+meant to long-poll it exactly as it will poll the real IMS (the poller itself is Step 3, not built yet).
+
+```sh
+openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj /CN=ims.siot.solutions \
+    -addext subjectAltName=DNS:ims.siot.solutions,IP:<this-host-ip> -keyout mock.key -out mock.crt
+export MOCK_TOKEN=<16+ chars>           # never commit; the server never prints it
+python3 -I tools/mock_ims.py --cert mock.crt --key mock.key        # https on :8443
+curl --cacert mock.crt -H "Authorization: Bearer $MOCK_TOKEN" -X POST \
+     -d '{"drawers":[{"zone":"B2","room":"Cabinet B","state":"green","cells":["2A-2D"]}],"ttlMs":15000}' \
+     https://<host>:8443/mock/emit
+```
+
+| Endpoint (also under `/api/v1`) | Behaviour |
+|---|---|
+| `GET /locate/latest` | newest event; `seq` 0 with no drawers before the first emit |
+| `GET /locate/next?after=S&wait=W` | first event with `seq > S`; `204` after `W` s (capped at 60) |
+| `POST /mock/emit` | inject an event; rejects unknown fields so no product names/ids can be added |
+
+Any wrong or missing bearer token gets `401`. `IMS_MOCK_CA=1` in `.env` is the switch that will let the
+firmware trust the mock's CA; it defaults to off, and a production build trusts only the certificate
+bundle. Nothing in the firmware reads it yet.
+
 ## Layout
 
 | Path | Purpose |
@@ -103,10 +128,11 @@ its timer.
 
 ```sh
 python3 -I tools/test_env_to_sdkconfig.py          # .env parser/validator
+python3 -I tools/test_mock_ims.py                  # mock IMS server (needs openssl for the TLS test)
 cc -o /tmp/test_led_color tools/test_led_color.c && /tmp/test_led_color   # colour scaling (host)
 ```
 
-Both suites were run and pass (Python: 13 tests; C: `led_color OK`).
+Both suites were run and pass (Python: 14 env-tool tests + 13 mock-IMS tests; C: `led_color OK`).
 
 ## Security notes
 
