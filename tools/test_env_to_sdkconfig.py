@@ -14,6 +14,12 @@ VALID = {
 
 
 class Tests(unittest.TestCase):
+    def test_mock_ca_flag(self):
+        self.assertIn("# CONFIG_SIOT_IMS_MOCK_CA is not set", e.build_config(VALID))
+        self.assertIn("CONFIG_SIOT_IMS_MOCK_CA=y", e.build_config(dict(VALID, IMS_MOCK_CA="1")))
+        with self.assertRaises(e.EnvError):
+            e.build_config(dict(VALID, IMS_MOCK_CA="yes"))
+
     def test_cabinet_and_map(self):
         out = e.build_config(VALID)
         self.assertIn('CONFIG_SIOT_CABINET="A"', out)
@@ -66,7 +72,8 @@ class Tests(unittest.TestCase):
                    "CABINET": "A", "DRAWER_MAP": "A1,A2,A3,A4,A5"}
         out = e.build_config(minimal)
         self.assertIn("CONFIG_SIOT_LED_COUNT=5", out)
-        self.assertNotIn("SIOT_IMS", out)
+        self.assertNotIn("SIOT_IMS_URL", out)
+        self.assertNotIn("SIOT_IMS_TOKEN", out)
         self.assertNotIn("SIOT_WEB_TOKEN", out)
         self.assertIn('CONFIG_SIOT_WEB_TOKEN="secret-token"',
                       e.build_config(dict(minimal, WEB_TOKEN="secret-token")))
