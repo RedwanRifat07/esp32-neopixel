@@ -8,3 +8,4 @@ sdkconfig
 sdkconfig.local
 sdkconfig.old
 !.env.example
+certs/

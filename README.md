@@ -12,7 +12,7 @@ its pixel glow for a fixed time, then switch off on its own timer.
 | Flash + boot on a real ESP32 | PROVEN | write verified, boot log shows config, Wi-Fi join and `web: listening on port 80` |
 | HTTP API (`/api/status`, `/api/glow`) | PROVEN | exercised with `curl` against the running board |
 | Pixels physically lighting on both strips | UNKNOWN | firmware logs success, but the LEDs were not observed by the author of this README |
-| IMS poller | NOT IMPLEMENTED | `IMS_*` settings are parsed and compiled in, but no code polls an IMS endpoint |
+| IMS poller | BUILT, bench-tested only against an unreachable server | connect failure + backoff (2 s, 4 s, 8 s) seen in the serial log; success path, event handling and TTL on the board are NOT yet exercised (Step 4) |
 | Behaviour on ESP-IDF 6.0 | UNKNOWN | only v5.5.4 was built |
 
 ## Hardware
@@ -49,7 +49,13 @@ cp .env.example .env     # then edit .env
 | `GLOW_MS` | no | 5000 | glow duration |
 | `GLOW_BRIGHTNESS_PCT` | no | 25 | 1–100 |
 | `GLOW_RGB` | no | `FFB46E` | `RRGGBB` |
-| `POLL_INTERVAL_MS`, `IMS_URL`, `IMS_TOKEN`, `DEVICE_ID` | no | – | reserved for the IMS poller (not implemented) |
+| `IMS_URL` | no | empty | IMS API base, `https://` only, no trailing slash, e.g. `https://ims.siot.solutions/api/v1`. Empty = poller disabled |
+| `IMS_TOKEN` | with `IMS_URL` | – | device key (scope `locate:read`) |
+| `IMS_MOCK_CA` | no | 0 | `1` = bench build that trusts **only** `certs/mock_ca.pem` (see below) |
+| `WIFI2_SSID`, `WIFI2_PASSWORD` | no | – | fallback network; set both or neither |
+| `GREEN_RGB`, `RED_RGB` | no | `00FF00`, `FF0000` | in-stock / out-of-stock colours, scaled by `GLOW_BRIGHTNESS_PCT` |
+| `LED_BOOT_TEST` | no | 0 | `1` = chase drawers 1..N at boot |
+| `POLL_INTERVAL_MS`, `DEVICE_ID` | no | – | accepted but unused |
 
 Constraints enforced by the tool: GPIOs 0, 1, 2, 3, 5, 6–12 and 15
 (strapping, flash, UART0) are rejected for LED data.
@@ -65,7 +71,7 @@ idf.py -p /dev/cu.usbserial-0001 flash monitor   # adjust the port
 ```
 
 The monitor prints the board's DHCP address (`wifi_sta: got ip ...`). On boot, with
-`CONFIG_SIOT_LED_BOOT_TEST=y` (default), drawers 1..N light in sequence as a wiring test.
+`LED_BOOT_TEST=1` (off by default), drawers 1..N light in sequence as a wiring test.
 
 ## HTTP API
 
@@ -74,7 +80,7 @@ Served on port 80. If `WEB_TOKEN` is set, POSTs must send `X-Auth-Token: <token>
 | Method | Path | Body | Result |
 |---|---|---|---|
 | GET | `/` | – | test page (drawer buttons) |
-| GET | `/api/status` | – | `{"drawers":5,"glow_ms":5000,"auth":false}` |
+| GET | `/api/status` | – | `{"cabinet":"A","drawers":5,"glow_ms":5000,"auth":false,"ssid":"<network>","ims":{"state":"ok","lastSeq":412,"lastOkAgeS":3}}`; `ims.state` is `disabled`, `syncing`, `ok`, `auth_failed` or `error`; never the Wi-Fi password |
 | POST | `/api/glow` | `{"drawer": <1..N>}` | glow that drawer; `400` if out of range |
 | POST | `/api/off` | – | turn all drawers off |
 
@@ -86,6 +92,16 @@ curl -X POST -H 'Content-Type: application/json' -d '{"drawer":3}' http://<board
 
 Several drawers can glow at once, each with its own timer; re-triggering a glowing drawer restarts
 its timer.
+
+## IMS poller
+
+`ims_locate.c` long-polls `GET <IMS_URL>/locate/next?after=<seq>&wait=25` with `Authorization: Bearer <IMS_TOKEN>` (30 s HTTP timeout).
+
+- **Boot / resync:** one `GET /locate/latest` to learn `seq`; nothing lights. Any failure re-learns `seq` this way, so a restarted server (seq reset) is recovered without a reboot. Events emitted during an outage are not replayed.
+- **200 + JSON:** parsed by `locate_apply()` and applied: only zones that start with this board's `CABINET` letter and appear in `DRAWER_MAP`; each event *replaces* the previous light set (nothing for this cabinet = all off); lit pixels switch off after `ttlMs` (default 15000 if absent).
+- **204:** poll again. **401/403:** log once, retry after 5 min. **Other errors** (including a non-JSON 200 from a proxy, redirects, oversized or malformed bodies): back off 2 s doubling to 60 s.
+- **Logged:** only `seq`, drawer count and HTTP status. The key and URL are never logged. Redirects are not followed so the key cannot be forwarded elsewhere.
+- **Wi-Fi:** hostname `siot-drawers-a` or `-b`; after 3 consecutive failures the board alternates to `WIFI2_*` if set.
 
 ## Mock IMS (bench)
 
@@ -108,9 +124,13 @@ curl --cacert mock.crt -H "Authorization: Bearer $MOCK_TOKEN" -X POST \
 | `GET /locate/next?after=S&wait=W` | first event with `seq > S`; `204` after `W` s (capped at 60) |
 | `POST /mock/emit` | inject an event; rejects unknown fields so no product names/ids can be added |
 
-Any wrong or missing bearer token gets `401`. `IMS_MOCK_CA=1` in `.env` is the switch that will let the
-firmware trust the mock's CA; it defaults to off, and a production build trusts only the certificate
-bundle. Nothing in the firmware reads it yet.
+Any wrong or missing bearer token gets `401`.
+
+`IMS_MOCK_CA=1` embeds `certs/mock_ca.pem` (the mock's certificate; `certs/` is gitignored) and trusts **only** it.
+This differs from "an extra CA": in ESP-IDF 5.5.4 `esp-tls` uses the certificate bundle *or* a supplied CA, not both
+(`esp_tls_mbedtls.c`: the bundle branch is tested first, the custom CA is an `else if`). A mock build therefore
+cannot reach the real IMS. The certificate must have a SAN for the host or IP in `IMS_URL`. A production build
+(`IMS_MOCK_CA=0`) uses only the certificate bundle, with no insecure fallback.
 
 ## Layout
 
@@ -118,6 +138,8 @@ bundle. Nothing in the firmware reads it yet.
 |---|---|
 | [main/app_main.c](main/app_main.c) | startup, NVS, Wi-Fi, LED driver, web server, boot chase test |
 | [main/led_glow.c](main/led_glow.c) | single-strip RMT driver; one task owns the strip, commands arrive over a queue |
+| [main/ims_locate.c](main/ims_locate.c) | IMS long-poll task and status |
+| [main/locate_apply.c](main/locate_apply.c) | pure event → per-pixel state function (host-tested) |
 | [main/web_server.c](main/web_server.c), [main/index.html](main/index.html) | HTTP server, API and test page |
 | [main/wifi_sta.c](main/wifi_sta.c) | station mode with timed reconnect backoff |
 | [main/led_color.h](main/led_color.h) | pure colour-scaling helper |
@@ -129,10 +151,12 @@ bundle. Nothing in the firmware reads it yet.
 ```sh
 python3 -I tools/test_env_to_sdkconfig.py          # .env parser/validator
 python3 -I tools/test_mock_ims.py                  # mock IMS server (needs openssl for the TLS test)
+J=$IDF_PATH/components/json/cJSON                 # locate_apply host test
+cc -I main -I $J tools/test_locate_apply.c main/locate_apply.c $J/cJSON.c -o /tmp/tla && /tmp/tla
 cc -o /tmp/test_led_color tools/test_led_color.c && /tmp/test_led_color   # colour scaling (host)
 ```
 
-Both suites were run and pass (Python: 14 env-tool tests + 13 mock-IMS tests; C: `led_color OK`).
+All suites were run and pass (Python: 16 env-tool + 13 mock-IMS tests; C: `led_color OK`, `locate_apply OK (24 state checks)`).
 
 ## Security notes
 
@@ -152,8 +176,20 @@ Both suites were run and pass (Python: 14 env-tool tests + 13 mock-IMS tests; C:
 | Common ground | Operator-reported: adapter, strip and ESP32 grounds are joined |
 | Brightness cap | 25% of `GLOW_RGB` by default (ASSUMED safe for 5 pixels; supply not measured) |
 
+## Known risks
+
+- **Flash headroom (PROVEN by build output):** the production build (full certificate bundle, `IMS_MOCK_CA=0`) leaves 0xad60 bytes (~4%) free in the 1 MB app partition; the mock build leaves ~11%. Options when it gets tighter: `CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_CMN` (smaller bundle), or a custom partition table (the chip reports 4 MB flash; the image header says 2 MB). Not changed yet.
+- **Level shifter absent** (operator-reported): see Bench results.
+
 ## Not done yet
 
-- IMS polling (`IMS_URL`/`IMS_TOKEN`/`DEVICE_ID`) is configuration only.
-- Disable `CONFIG_SIOT_LED_BOOT_TEST` once real triggers drive the LEDs.
+- On-board test of the poller against the mock and the real IMS (Step 4), plus the overnight soak.
 - Flash size: the board reports 4 MB but the image header is 2 MB; the extra space is unused.
+
+## Recovering a board
+
+1. Find the port: `ls /dev/cu.usbserial-*`. Read the MAC first and confirm it is the board you mean: `python -m esptool --port <port> read_mac`.
+2. Rebuild and re-flash (write only): `idf.py -B build -p <port> flash`. Do **not** `erase_flash` without the lab lead's yes.
+3. If it will not boot, hold BOOT, tap EN, then flash (the usual ESP32 dev-board procedure; not needed so far). Watch `idf.py -p <port> monitor` for `wifi_sta: got ip` and `ims: synced at seq ...`.
+4. Wi-Fi never joins: check `WIFI_SSID` is 2.4 GHz, add `WIFI2_*` as a fallback, and confirm the board is within range. (One boot on 2026-10-12 needed ~45 s to join, reason 201 "AP not found", then joined; cause unknown.)
+5. `ims.state` stuck at `error`: the board cannot reach `IMS_URL` or the TLS check fails (wrong CA / SAN). `auth_failed`: the device key is wrong or revoked; it retries every 5 min.
