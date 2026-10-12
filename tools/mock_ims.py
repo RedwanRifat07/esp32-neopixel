@@ -2,7 +2,7 @@
 """Mock IMS locate service for bench-testing the drawer-lights firmware. Stdlib only.
 
 Serves the contract the board consumes (with or without the /api/v1 prefix):
-  GET  /locate/latest                  newest event (seq 0 + no drawers if none yet)
+  GET  /locate/latest                  newest event; 204 if none yet (as the real IMS does)
   GET  /locate/next?after=<seq>&wait=S the first event with seq > after; 204 after S seconds
   POST /mock/emit  {"drawers":[...], "ttlMs": 15000}   inject an event
 
@@ -48,11 +48,9 @@ class EventStore:
             return ev
 
     def latest(self):
+        """Newest event, or None before the first emit (the real IMS answers 204 then)."""
         with self._cv:
-            if self._events:
-                return self._events[-1]
-        return {"seq": 0, "ts": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "ttlMs": DEFAULT_TTL_MS, "drawers": []}
+            return self._events[-1] if self._events else None
 
     def next_after(self, after, wait_s):
         """First event with seq > after, waiting up to wait_s seconds; None on timeout."""
@@ -137,7 +135,8 @@ def make_handler(store, token):
             url = urlparse(self.path)
             route = self._route(url.path)
             if route == "/locate/latest":
-                return self._send(200, store.latest())
+                ev = store.latest()
+                return self._send(204) if ev is None else self._send(200, ev)
             if route == "/locate/next":
                 q = parse_qs(url.query)
                 try:

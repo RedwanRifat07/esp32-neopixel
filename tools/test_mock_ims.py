@@ -45,9 +45,8 @@ class Tests(unittest.TestCase):
     def emit(self, drawers, **kw):
         return call(self.httpd, "POST", "/mock/emit", dict(drawers=drawers, **kw))
 
-    def test_latest_empty_is_seq0(self):
-        st, ev, _ = call(self.httpd, "GET", "/locate/latest")
-        self.assertEqual((st, ev["seq"], ev["drawers"]), (200, 0, []))
+    def test_latest_empty_is_204(self):
+        self.assertEqual(call(self.httpd, "GET", "/locate/latest")[:2], (204, None))
 
     def test_emit_then_latest_and_prefix(self):
         st, ev, _ = self.emit([{"zone": "B2", "room": "Cabinet B", "state": "green", "cells": ["2A-2D"]}])
@@ -91,7 +90,7 @@ class Tests(unittest.TestCase):
             for hdr in ({}, {"Authorization": "Bearer wrong"}, {"Authorization": TOKEN}):
                 st, _, _ = call(self.httpd, method, path, {"drawers": []} if method == "POST" else None, hdr)
                 self.assertEqual(st, 401, (method, path, hdr))
-        self.assertEqual(self.store.latest()["seq"], 0)  # unauthorised emit changed nothing
+        self.assertIsNone(self.store.latest())  # unauthorised emit changed nothing
 
     def test_emit_validation(self):
         bad = [
@@ -104,7 +103,7 @@ class Tests(unittest.TestCase):
         ]
         for b in bad:
             self.assertEqual(call(self.httpd, "POST", "/mock/emit", b)[0], 400, b)
-        self.assertEqual(self.store.latest()["seq"], 0)
+        self.assertIsNone(self.store.latest())
 
     def test_bad_query_and_routes(self):
         self.assertEqual(call(self.httpd, "GET", "/locate/next?after=abc")[0], 400)
@@ -137,8 +136,8 @@ class TlsTest(unittest.TestCase):
             httpd, _ = start(crt, key)
             try:
                 trusted = ssl.create_default_context(cafile=crt)
-                st, ev, _ = call(httpd, "GET", "/locate/latest", tls=trusted)
-                self.assertEqual((st, ev["seq"]), (200, 0))
+                st, body, _ = call(httpd, "GET", "/locate/latest", tls=trusted)
+                self.assertEqual((st, body), (204, None))
                 with self.assertRaises(ssl.SSLError):  # system CAs must not trust it
                     call(httpd, "GET", "/locate/latest", tls=ssl.create_default_context())
             finally:

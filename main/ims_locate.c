@@ -180,7 +180,18 @@ static void poller_task(void *arg)
             r = http_get(path, body, sizeof(body), &len);
         }
 
-        if (r == R_NO_EVENT && synced) {
+        if (r == R_NO_EVENT && !synced) {
+            /* The real IMS answers /locate/latest with 204 while it has no event yet. */
+            seq = 0;
+            synced = true;
+            ESP_LOGI(TAG, "no events yet; synced at seq 0");
+            note_ok(0);
+            set_state("ok");
+            backoff_ms = BACKOFF_MIN_MS;
+            auth_logged = false;
+            continue;
+        }
+        if (r == R_NO_EVENT) {
             note_ok(-1);
             continue; /* long-poll timed out: poll again */
         }

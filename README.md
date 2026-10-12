@@ -98,7 +98,7 @@ its timer.
 
 `ims_locate.c` long-polls `GET <IMS_URL>/locate/next?after=<seq>&wait=25` with `Authorization: Bearer <IMS_TOKEN>` (30 s HTTP timeout).
 
-- **Boot / resync:** one `GET /locate/latest` to learn `seq`; nothing lights. Any failure re-learns `seq` this way, so a restarted server (seq reset) is recovered without a reboot. Events emitted during an outage are not replayed.
+- **Boot / resync:** one `GET /locate/latest` to learn `seq` (a `204` means no event yet: start at seq 0); nothing lights. Any failure re-learns `seq` this way, so a restarted server (seq reset) is recovered without a reboot. Events emitted during an outage are not replayed.
 - **200 + JSON:** parsed by `locate_apply()` and applied: only zones that start with this board's `CABINET` letter and appear in `DRAWER_MAP`; each event *replaces* the previous light set (nothing for this cabinet = all off); lit pixels switch off after `ttlMs` (default 15000 if absent).
 - **204:** poll again. **401/403:** log once, retry after 5 min. **Other errors** (including a non-JSON 200 from a proxy, redirects, oversized or malformed bodies): back off 2 s doubling to 60 s.
 - **Logged:** only `seq`, drawer count and HTTP status. The key and URL are never logged. Redirects are not followed so the key cannot be forwarded elsewhere.
@@ -121,7 +121,7 @@ curl --cacert mock.crt -H "Authorization: Bearer $MOCK_TOKEN" -X POST \
 
 | Endpoint (also under `/api/v1`) | Behaviour |
 |---|---|
-| `GET /locate/latest` | newest event; `seq` 0 with no drawers before the first emit |
+| `GET /locate/latest` | newest event; `204` before the first emit (observed behaviour of the real IMS on 2026-10-12) |
 | `GET /locate/next?after=S&wait=W` | first event with `seq > S`; `204` after `W` s (capped at 60) |
 | `POST /mock/emit` | inject an event; rejects unknown fields so no product names/ids can be added |
 
